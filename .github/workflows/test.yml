@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu-24.04: Ubuntu 26.04 runners have no builds of older Python versions.
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+        python: ["3.9", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Validate JSON manifests
+        shell: bash
+        run: |
+          for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+            python -m json.tool "$f" > /dev/null && echo "ok: $f"
+          done
+      - name: Run tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -v 2>&1 | tee test-output.txt || {
+            # Surface the failure as an annotation, readable without signing in.
+            python -c "t=open('test-output.txt',encoding='utf-8',errors='replace').read()[-6000:]; print('::error title=unittest failed::'+t.replace('%','%25').replace('\r','').replace('\n','%0A'))"
+            exit 1
+          }

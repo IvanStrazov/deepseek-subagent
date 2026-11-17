@@ -1,0 +1,13 @@
+{
+  "name": "deepseek-subagent",
+  "version": "0.1.0",
+  "description": "Cheap DeepSeek sub-agents for Claude Code: delegate bulk or mechanical work (summarize files, search, draft, classify, simulate) to DeepSeek models in a tool loop confined to one folder, run many in parallel, and get the exact cost of each.",
+  "author": {
+    "name": "Ivan Strazov",
+    "url": "https://github.com/IvanStrazov"
+  },
+  "homepage": "https://github.com/IvanStrazov/deepseek-subagent",
+  "repository": "https://github.com/IvanStrazov/deepseek-subagent",
+  "license": "MIT",
+  "keywords": ["deepseek", "subagent", "delegation", "cost", "parallel", "cheap"]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "deepseek-subagent",
+  "owner": {
+    "name": "Ivan Strazov",
+    "url": "https://github.com/IvanStrazov"
+  },
+  "plugins": [
+    {
+      "name": "deepseek-subagent",
+      "source": "./",
+      "description": "Cheap DeepSeek sub-agents for bulk work, with exact cost per task.",
+      "version": "0.1.0"
+    }
+  ]
+}
