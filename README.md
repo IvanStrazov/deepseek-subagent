@@ -12,6 +12,7 @@ $ ds.py run "Summarize every SKILL.md here in 3 bullets" --dir ./repo
 - **`ask`** — one call, no tools, files attached as text. Cheapest.
 - **`run`** — an agent with `list_files` / `read_file` / `grep`, confined to a folder; `--write` adds `write_file`, `--bash` adds a shell.
 - **`batch`** — many `run`s in parallel from a JSONL file, one result file per task, total cost at the end.
+- **Two models**: `--model flash` (default, cheapest) or `--model pro` (stronger reasoning) on any call; a batch task can set its own `"model"`; `setup --model pro` changes the default.
 - **Cost on every call**, from DeepSeek's own token counts (cache hits included), plus a local spend log (`usage`).
 - Stdlib-only Python 3.9+, no dependencies, no MCP server.
 

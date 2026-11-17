@@ -9,7 +9,7 @@
       "name": "deepseek-subagent",
       "source": "./",
       "description": "Cheap DeepSeek sub-agents for bulk work, with exact cost per task.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }

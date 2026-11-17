@@ -20,7 +20,13 @@ Not: anything where a mistake is costly and hard to check (security decisions, f
 - `D ask "prompt" [--file F …]` — one call, no tools: rewriting, classifying, a quick opinion on attached files. Cheapest.
 - `D run "task" [--dir D] [--write] [--bash] [--max-steps N]` — an agent with tools confined to folder D (default: cwd). Read-only by default; `--write` lets it create/edit files there (file tools cannot leave the folder). `--bash` gives it a real shell as the user — not a sandbox: a deny-list refuses only the obvious (push, curl/wget, ssh, installs, `rm -rf /`). Give `--write`/`--bash` only when the task needs them, and `--bash` only for trusted folders and tasks.
 - `D batch tasks.jsonl [--workers N] [--out DIR]` — many runs in parallel; each line `{"id": "...", "task": "...", "dir": "...", "write": false, "bash": false}`; one result file per id in DIR.
-- `D usage [--days N]` — spend so far. `D setup --model deepseek-v4-pro` switches to the stronger, ~3× pricier model.
+- `D usage [--days N]` — spend so far.
+
+## Choosing the model
+Every command takes `--model flash|pro` for that call; in a batch, a task can carry its own `"model"`. `D setup --model pro` changes the default (flash unless changed).
+- **flash** (default, cheapest): bulk reading, summaries, search, extraction, classification, drafts, simulations.
+- **pro** (~3–4× the price per token): tasks that need careful reasoning or judgment — reviewing a methodology or architecture, tricky debugging, evaluating other agents' output, anything where a flash answer came back shallow or wrong.
+Start with flash; switch to pro for a task only when quality matters more than cost, or when the user asks for it. Say which model you used.
 
 ## Writing the task
 The sub-agent knows nothing about this conversation. Write a self-contained brief: the goal, the exact files or folder, what to return and in what format (e.g. "a Markdown table: file | purpose | risks"), and limits ("read at most 20 files"). Ask for evidence (path:line) so the result can be checked.

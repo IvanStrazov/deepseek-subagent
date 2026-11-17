@@ -97,6 +97,16 @@ class DsTest(unittest.TestCase):
         self.assertIn("= $0.0005 peak", r.stdout)
         self.assertEqual(Fake.seen[0]["auth"], f"Bearer {SECRET}")
         self.assertIn("1 task(s)", self.ds("usage").stdout)
+        self.assertEqual(Fake.seen[0]["body"]["model"], "deepseek-flash")
+        r = self.ds("run", "what is in a.txt?", "--model", "pro")
+        self.assertEqual(Fake.seen[-1]["body"]["model"], "deepseek-v4-pro")
+        # same tokens at pro prices: 2 x (400*1.32 + 600*0.044 + 100*3.96) / 1e6
+        self.assertIn("deepseek-v4-pro: 2 call(s)", r.stdout)
+        self.assertIn("= $0.0019 peak", r.stdout)
+        self.ds("setup", "--model", "pro")
+        self.assertIn("default model: deepseek-v4-pro", self.ds("status").stdout)
+        self.ds("ask", "hi", "--model", "flash")
+        self.assertEqual(Fake.seen[-1]["body"]["model"], "deepseek-flash")
 
     def test_confined_and_read_only_by_default(self):
         self.ds("setup", "--key-file", str(self.envf))
@@ -134,9 +144,11 @@ class DsTest(unittest.TestCase):
         self.assertIn("3 task(s)", r.stdout)
         self.assertEqual(len(list((self.tmp / "tasks").glob("t*.md"))), 3)
         self.assertNotIn("FAIL", r.stdout)
-        tasks.write_text(json.dumps({"id": "../evil", "task": "go"}) + "\n" + json.dumps({"task": "no id"}),
+        tasks.write_text(json.dumps({"id": "../evil", "task": "go", "model": "pro"}) + "\n" + json.dumps({"task": "no id"}),
                          encoding="utf-8")
-        self.ds("batch", str(tasks))
+        Fake.seen = []
+        self.ds("batch", str(tasks), "--workers", "1")
+        self.assertEqual(sorted(s["body"]["model"] for s in Fake.seen), ["deepseek-flash", "deepseek-v4-pro"])
         self.assertFalse((self.tmp / "evil.md").exists())          # ids never leave --out
         self.assertTrue((self.tmp / "tasks" / "evil.md").is_file())
         self.assertTrue((self.tmp / "tasks" / "task2.md").is_file())  # stable fallback id

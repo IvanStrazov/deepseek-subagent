@@ -7,6 +7,7 @@ simulate users) and gets back the answer plus the exact cost.
 
 Commands:
   setup [--key-file F] [--model M]    where the API key comes from (never printed); default model
+                                      (any command also takes --model flash|pro for one call)
   status                              key found? model, prices, spend so far
   ask "PROMPT" [--file F ...]         one call, no tools (cheapest); files are attached as text
   run "TASK" [--dir D] [--write] [--bash] [--max-steps N]
@@ -41,6 +42,7 @@ CONF = CONF_DIR / "config.json"
 USAGE = CONF_DIR / "usage.jsonl"
 DEFAULT_MODEL = "deepseek-flash"
 # USD per 1M tokens, peak hours (off-peak is half). From api-docs.deepseek.com, 2026-11-17.
+ALIASES = {"flash": "deepseek-flash", "pro": "deepseek-v4-pro"}
 PRICES = {"deepseek-flash": {"hit": 0.006, "miss": 0.30, "out": 1.20},
           "deepseek-v4-pro": {"hit": 0.044, "miss": 1.32, "out": 3.96}}
 OUT_CAP = 12000          # chars of one tool result shown to the model
@@ -80,14 +82,24 @@ def read_env_file(path):
     return out
 
 
-def api_settings():
+def resolve_model(m):
+    """'flash' / 'pro' / a full model id -> the model id; unknown ids are allowed but priced as flash."""
+    if not m:
+        return None
+    m = ALIASES.get(m.lower(), m)
+    if m not in PRICES:
+        print(f"[ds] note: no price for {m}; cost is estimated with {DEFAULT_MODEL} prices", file=sys.stderr)
+    return m
+
+
+def api_settings(model=None):
     c = load_conf()
     env = read_env_file(c["key_file"]) if c.get("key_file") else {}
     key = os.environ.get("DEEPSEEK_API_KEY") or env.get("DEEPSEEK_API_KEY", "")
     base = (os.environ.get("DEEPSEEK_BASE_URL") or env.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/v1").rstrip("/")
     if not base.endswith("/v1"):
         base += "/v1"
-    model = c.get("model") or DEFAULT_MODEL
+    model = resolve_model(model) or c.get("model") or DEFAULT_MODEL
     return key, base, model
 
 
@@ -258,8 +270,8 @@ Rules:
 - Stop as soon as you have the answer; don't explore more than needed."""
 
 
-def run_task(task, root, write=False, bash=False, max_steps=40, label="", effort="high"):
-    key, base, model = api_settings()
+def run_task(task, root, write=False, bash=False, max_steps=40, label="", effort="high", model=None):
+    key, base, model = api_settings(model)
     if not key:
         raise SystemExit("[ds] no API key: set DEEPSEEK_API_KEY or run `ds.py setup --key-file <.env>`")
     box = Box(root, write, bash)
@@ -304,7 +316,7 @@ def cmd_setup(a):
             raise SystemExit(f"[ds] no DEEPSEEK_API_KEY line in {a.key_file}")
         c["key_file"] = str(Path(a.key_file).expanduser().resolve())
     if a.model:
-        c["model"] = a.model
+        c["model"] = resolve_model(a.model)
     save_conf(c)
     cmd_status(a)
 
@@ -314,15 +326,17 @@ def cmd_status(_):
     c = load_conf()
     src = "env DEEPSEEK_API_KEY" if os.environ.get("DEEPSEEK_API_KEY") else (c.get("key_file") or "none")
     print(f"[ds] key: {'found' if key else 'NOT FOUND'} (source: {src})")
-    print(f"[ds] model: {model}  endpoint: {base}")
-    p = PRICES.get(model, PRICES[DEFAULT_MODEL])
-    print(f"[ds] price per 1M tokens, peak: ${p['miss']} input, ${p['hit']} cached input, ${p['out']} output; off-peak half")
+    print(f"[ds] default model: {model}  endpoint: {base}  (per call: --model flash|pro)")
+    for alias, mid in ALIASES.items():
+        p = PRICES[mid]
+        print(f"[ds] {alias:<5} {mid}: per 1M tokens, peak ${p['miss']} input, ${p['hit']} cached, "
+              f"${p['out']} output; off-peak half")
     tot = spend(30)
     print(f"[ds] spent in 30 days: ${tot['usd']:.4f} over {tot['n']} task(s)")
 
 
 def cmd_ask(a):
-    key, base, model = api_settings()
+    key, base, model = api_settings(a.model)
     if not key:
         raise SystemExit("[ds] no API key: set DEEPSEEK_API_KEY or run `ds.py setup --key-file <.env>`")
     parts = [a.prompt]
@@ -338,7 +352,7 @@ def cmd_ask(a):
 
 def cmd_run(a):
     answer, usage, steps, changed = run_task(a.task, a.dir or os.getcwd(), a.write, a.bash, a.max_steps,
-                                             effort=a.effort)
+                                             effort=a.effort, model=a.model)
     print(answer)
     if changed:
         print(f"[ds] files written: {', '.join(sorted(set(changed)))}")
@@ -354,7 +368,8 @@ def cmd_batch(a):
         # ids become file names: keep them inside --out and stable across runs
         jid = re.sub(r"[^\w.-]+", "_", str(j.get("id") or f"task{n + 1}")).strip("._") or f"task{n + 1}"
         ans, u, steps, changed = run_task(j["task"], j.get("dir") or os.getcwd(), bool(j.get("write")),
-                                          bool(j.get("bash")), int(j.get("max_steps", a.max_steps)), label=jid)
+                                          bool(j.get("bash")), int(j.get("max_steps", a.max_steps)), label=jid,
+                                          model=j.get("model") or a.model)
         (out / f"{jid}.md").write_text(ans + "\n", encoding="utf-8")
         return jid, u, steps, changed
 
@@ -398,13 +413,14 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("setup")
     p.add_argument("--key-file")
-    p.add_argument("--model", choices=sorted(PRICES))
+    p.add_argument("--model", help="default model: flash, pro or a model id")
     p.set_defaults(fn=cmd_setup)
     sub.add_parser("status").set_defaults(fn=cmd_status)
     p = sub.add_parser("ask")
     p.add_argument("prompt")
     p.add_argument("--file", action="append")
     p.add_argument("--effort", default="high")
+    p.add_argument("--model", help="flash (default) or pro, for this call")
     p.set_defaults(fn=cmd_ask)
     p = sub.add_parser("run")
     p.add_argument("task")
@@ -413,12 +429,14 @@ def main(argv=None):
     p.add_argument("--bash", action="store_true")
     p.add_argument("--max-steps", type=int, default=40)
     p.add_argument("--effort", default="high")
+    p.add_argument("--model", help="flash (default) or pro, for this call")
     p.set_defaults(fn=cmd_run)
     p = sub.add_parser("batch")
     p.add_argument("tasks")
     p.add_argument("--workers", type=int, default=5)
     p.add_argument("--out")
     p.add_argument("--max-steps", type=int, default=40)
+    p.add_argument("--model", help="flash or pro for tasks without their own \"model\"")
     p.set_defaults(fn=cmd_batch)
     p = sub.add_parser("usage")
     p.add_argument("--days", type=int, default=30)
